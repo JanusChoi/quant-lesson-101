@@ -295,13 +295,3 @@ jobs:
         else
           echo "⚠️  Application page returned HTTP $APP_STATUS"
         fi
-    
-    # 如果部署失败，自动重试（由check-build-status工作流处理）
-    
-on-failure:
-  - name: Send failure notification
-    if: failure()
-    run: |
-      echo "❌ Deployment failed!"
-      echo "Workflow will be automatically retried by the check-build-status workflow."
-      echo "You can also manually trigger a retry from GitHub Actions UI."
