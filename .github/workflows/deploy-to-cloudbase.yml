@@ -15,10 +15,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      matrix:
-        attempt: [1, 2, 3]
-    continue-on-error: false
     
     steps:
     - name: Checkout code
@@ -121,7 +117,7 @@ jobs:
         CLOUDBASE_SECRETID: ${{ secrets.CLOUDBASE_SECRETID }}
         CLOUDBASE_SECRETKEY: ${{ secrets.CLOUDBASE_SECRETKEY }}
       run: |
-        echo "📦 Attempt ${{ matrix.attempt }} of 3: Logging in to CloudBase with API Key..."
+        echo "📦 Logging in to CloudBase with API Key..."
         echo "==================================================="
         
         # 检查必要的secret是否已配置
@@ -191,9 +187,10 @@ jobs:
           echo "⚠️  Continuing with deployment attempt..."
         fi
     
-    - name: Deploy to CloudBase
+    - name: Deploy to CloudBase with retry
+      id: deploy
       run: |
-        echo "🚀 Attempt ${{ matrix.attempt }} of 3: Deploying to CloudBase environment: ${{ secrets.CLOUDBASE_ENVID }}"
+        echo "🚀 Deploying to CloudBase environment: ${{ secrets.CLOUDBASE_ENVID }}"
         echo "==================================================="
         
         DEPLOY_ENVID="${{ secrets.CLOUDBASE_ENVID }}"
@@ -261,14 +258,7 @@ jobs:
           echo "❌ Failed to deploy after $MAX_DEPLOY_RETRIES attempts"
           echo "Deployment logs:"
           echo "$DEPLOY_OUTPUT"
-          
-          # 如果是最后一次矩阵尝试，才彻底失败
-          if [ "${{ matrix.attempt }}" = "3" ]; then
-            exit 1
-          else
-            echo "⚠️  This was attempt ${{ matrix.attempt }} of 3, continuing to next attempt"
-            exit 0  # 退出但不失败，让矩阵继续
-          fi
+          exit 1
         fi
     
     - name: Verify deployment
@@ -305,3 +295,13 @@ jobs:
         else
           echo "⚠️  Application page returned HTTP $APP_STATUS"
         fi
+    
+    # 如果部署失败，自动重试（由check-build-status工作流处理）
+    
+on-failure:
+  - name: Send failure notification
+    if: failure()
+    run: |
+      echo "❌ Deployment failed!"
+      echo "Workflow will be automatically retried by the check-build-status workflow."
+      echo "You can also manually trigger a retry from GitHub Actions UI."
