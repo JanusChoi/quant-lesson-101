@@ -1,0 +1,179 @@
+name: Deploy to CloudBase
+
+on:
+  push:
+    branches: [ main ]
+  # 手动触发部署
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Deployment reason'
+        required: false
+        default: 'Manual deployment'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        # 检出完整历史以便后续操作
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install CloudBase CLI
+      run: npm install -g @cloudbase/cli
+    
+    - name: Verify CloudBase configuration
+      run: |
+        echo "Checking CloudBase configuration..."
+        if [ ! -f "cloudbaserc.json" ]; then
+          echo "❌ cloudbaserc.json not found!"
+          exit 1
+        fi
+        echo "✅ cloudbaserc.json found"
+        
+        # 检查环境ID配置
+        ENV_ID=$(grep -o '"envId": *"[^"]*"' cloudbaserc.json | cut -d'"' -f4)
+        if [ -z "$ENV_ID" ]; then
+          echo "❌ envId not found in cloudbaserc.json"
+          exit 1
+        fi
+        echo "✅ Environment ID: $ENV_ID"
+    
+    - name: Prepare deployment directory
+      run: |
+        echo "Preparing deployment directory..."
+        
+        # 如果deploy目录不存在，创建它
+        if [ ! -d "deploy" ]; then
+          mkdir deploy
+        fi
+        
+        # 复制必要文件到deploy目录
+        echo "Copying essential files to deploy directory..."
+        
+        # 复制主HTML文件
+        if [ -f "anki学习系统.html" ]; then
+          cp "anki学习系统.html" deploy/
+          echo "✅ Copied anki学习系统.html"
+        else
+          echo "❌ anki学习系统.html not found!"
+          exit 1
+        fi
+        
+        # 复制数据文件
+        if [ -f "cards_data.json" ]; then
+          cp cards_data.json deploy/
+          echo "✅ Copied cards_data.json"
+        else
+          echo "❌ cards_data.json not found!"
+          exit 1
+        fi
+        
+        # 复制CloudBase配置
+        if [ -f "cloudbaserc.json" ]; then
+          cp cloudbaserc.json deploy/
+          echo "✅ Copied cloudbaserc.json"
+        fi
+        
+        # 创建或更新index.html重定向文件
+        cat > deploy/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anki学习系统 - 重定向</title>
+    <meta http-equiv="refresh" content="0; url=anki学习系统.html">
+    <script>
+        // JavaScript重定向作为备用
+        window.location.href = "anki学习系统.html";
+    </script>
+</head>
+<body>
+    <p>正在重定向到Anki学习系统... 如果未自动跳转，请<a href="anki学习系统.html">点击这里</a>。</p>
+</body>
+</html>
+EOF
+        echo "✅ Created/updated index.html redirect file"
+        
+        # 显示deploy目录内容
+        echo "Deploy directory contents:"
+        ls -la deploy/
+    
+    - name: Login to CloudBase
+      env:
+        CLOUDBASE_ENVID: ${{ secrets.CLOUDBASE_ENVID }}
+        CLOUDBASE_SECRETID: ${{ secrets.CLOUDBASE_SECRETID }}
+        CLOUDBASE_SECRETKEY: ${{ secrets.CLOUDBASE_SECRETKEY }}
+      run: |
+        echo "Logging in to CloudBase..."
+        
+        # 检查必要的secret是否已配置
+        if [ -z "$CLOUDBASE_ENVID" ] || [ -z "$CLOUDBASE_SECRETID" ] || [ -z "$CLOUDBASE_SECRETKEY" ]; then
+          echo "❌ CloudBase secrets not configured!"
+          echo "Please configure the following secrets in GitHub:"
+          echo "  - CLOUDBASE_ENVID"
+          echo "  - CLOUDBASE_SECRETID"
+          echo "  - CLOUDBASE_SECRETKEY"
+          exit 1
+        fi
+        
+        # 登录到CloudBase
+        cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY"
+        
+        echo "✅ Successfully logged in to CloudBase"
+    
+    - name: Deploy to CloudBase
+      env:
+        CLOUDBASE_ENVID: ${{ secrets.CLOUDBASE_ENVID }}
+      run: |
+        echo "Deploying to CloudBase environment: $CLOUDBASE_ENVID"
+        
+        # 部署到CloudBase
+        cloudbase hosting:deploy deploy/ -e "$CLOUDBASE_ENVID"
+        
+        echo "✅ Deployment completed!"
+    
+    - name: Verify deployment
+      run: |
+        echo "Verifying deployment..."
+        
+        # 获取环境ID
+        ENV_ID=$(grep -o '"envId": *"[^"]*"' cloudbaserc.json | cut -d'"' -f4)
+        
+        # 构造部署URL
+        DEPLOY_URL="https://${ENV_ID}-1256169472.tcloudbaseapp.com"
+        
+        echo "Testing deployment URL: $DEPLOY_URL"
+        
+        # 测试主页面可访问性
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL")
+        
+        if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ] || [ "$HTTP_STATUS" = "301" ]; then
+          echo "✅ Deployment verified! HTTP Status: $HTTP_STATUS"
+          echo "🌐 Website is live at: $DEPLOY_URL"
+        else
+          echo "⚠️  Deployment might have issues. HTTP Status: $HTTP_STATUS"
+          echo "Trying to fetch more details..."
+          curl -I "$DEPLOY_URL" || true
+          # 不因验证失败而终止工作流，只记录警告
+        fi
+        
+        # 测试应用页面
+        APP_URL="${DEPLOY_URL}/anki学习系统.html"
+        APP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL")
+        
+        if [ "$APP_STATUS" = "200" ]; then
+          echo "✅ Application page accessible: $APP_URL"
+        else
+          echo "⚠️  Application page returned HTTP $APP_STATUS"
+        fi
