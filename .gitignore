@@ -1,11 +1,50 @@
-# CloudBase 忽略规则同步（基于cloudbaserc.json配置）
-主动投资组合管理/**
-打开量化投资的黑箱/**
-模板_*
+# Git忽略规则配置
+# 注意：修改了规则以保留课程素材的.md文件，因为Agent需要使用
+
+# 排除Python脚本
 *.py
-*.md
+
+# 排除文本文件（除非是课程内容）
 *.txt
+
+# 排除演示文稿
 *.pptx
+
+# 排除部署目录（deploy/目录的内容会从其他地方复制，不需要跟踪原始文件）
+deploy/
+
+# Git 标准忽略
+node_modules/
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# 环境配置文件（敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 操作系统生成文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.~lock.*
+
+# 包管理器文件
+yarn.lock
+pnpm-lock.yaml
 
 # 部署目录（deploy/目录的内容会从其他地方复制，不需要跟踪原始文件）
 deploy/
