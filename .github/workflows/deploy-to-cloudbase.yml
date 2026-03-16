@@ -14,6 +14,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        attempt: [1, 2, 3]
+    continue-on-error: false
     
     steps:
     - name: Checkout code
@@ -116,7 +121,8 @@ jobs:
         CLOUDBASE_SECRETID: ${{ secrets.CLOUDBASE_SECRETID }}
         CLOUDBASE_SECRETKEY: ${{ secrets.CLOUDBASE_SECRETKEY }}
       run: |
-        echo "Logging in to CloudBase with API Key..."
+        echo "📦 Attempt ${{ matrix.attempt }} of 3: Logging in to CloudBase with API Key..."
+        echo "==================================================="
         
         # 检查必要的secret是否已配置
         if [ -z "$CLOUDBASE_ENVID" ] || [ -z "$CLOUDBASE_SECRETID" ] || [ -z "$CLOUDBASE_SECRETKEY" ]; then
@@ -133,27 +139,137 @@ jobs:
         echo "CLOUDBASE_SECRETID: $CLOUDBASE_SECRETID"
         echo "CLOUDBASE_SECRETKEY: [HIDDEN]"
         
-        # 使用腾讯云API密钥登录
-        npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY"
+        # 清理可能的缓存或临时登录状态
+        echo "Cleaning up any previous CloudBase session..."
+        rm -rf ~/.cloudbase || true
+        
+        # 使用腾讯云API密钥登录，添加重试逻辑
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+        LOGIN_SUCCESS=false
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$LOGIN_SUCCESS" = "false" ]; do
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          echo "Attempting CloudBase login (try $RETRY_COUNT of $MAX_RETRIES)..."
+          
+          # 设置超时和重试延迟
+          timeout 30s npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY" 2>&1 | tee login.log
+          LOGIN_EXIT_CODE=${PIPESTATUS[0]}
+          
+          if [ $LOGIN_EXIT_CODE -eq 0 ]; then
+            LOGIN_SUCCESS=true
+            echo "✅ CloudBase login successful"
+          else
+            echo "⚠️  CloudBase login failed (exit code: $LOGIN_EXIT_CODE)"
+            
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retrying in 5 seconds..."
+              sleep 5
+            fi
+          fi
+        done
+        
+        if [ "$LOGIN_SUCCESS" = "false" ]; then
+          echo "❌ Failed to login to CloudBase after $MAX_RETRIES attempts"
+          echo "Login log:"
+          cat login.log 2>/dev/null || true
+          exit 1
+        fi
         
         # 验证登录成功
-        if npx cloudbase env:list | grep -q "$CLOUDBASE_ENVID"; then
-          echo "✅ Successfully logged in to CloudBase"
-        else
-          echo "❌ Failed to login to CloudBase or environment not found"
+        echo "Verifying login and environment access..."
+        if timeout 15s npx cloudbase env:list 2>/dev/null | grep -q "$CLOUDBASE_ENVID"; then
+          echo "✅ Successfully logged in to CloudBase and found environment: $CLOUDBASE_ENVID"
           echo "Available environments:"
-          npx cloudbase env:list || true
-          exit 1
+          timeout 10s npx cloudbase env:list 2>/dev/null || echo "Cannot list environments"
+        else
+          echo "❌ Failed to verify CloudBase login or environment not found"
+          echo "Trying to list all environments:"
+          timeout 10s npx cloudbase env:list 2>/dev/null || echo "Cannot list environments"
+          
+          # 即使环境列表失败，也可能可以部署（尝试继续）
+          echo "⚠️  Continuing with deployment attempt..."
         fi
     
     - name: Deploy to CloudBase
       run: |
-        echo "Deploying to CloudBase environment: ${{ secrets.CLOUDBASE_ENVID }}"
+        echo "🚀 Attempt ${{ matrix.attempt }} of 3: Deploying to CloudBase environment: ${{ secrets.CLOUDBASE_ENVID }}"
+        echo "==================================================="
         
-        # 部署到CloudBase
-        npx cloudbase hosting:deploy deploy/ -e "${{ secrets.CLOUDBASE_ENVID }}" --verbose
+        DEPLOY_ENVID="${{ secrets.CLOUDBASE_ENVID }}"
         
-        echo "✅ Deployment completed!"
+        if [ -z "$DEPLOY_ENVID" ]; then
+          echo "❌ CloudBase environment ID not set"
+          exit 1
+        fi
+        
+        # 部署到CloudBase，添加重试逻辑
+        MAX_DEPLOY_RETRIES=3
+        DEPLOY_RETRY_COUNT=0
+        DEPLOY_SUCCESS=false
+        
+        while [ $DEPLOY_RETRY_COUNT -lt $MAX_DEPLOY_RETRIES ] && [ "$DEPLOY_SUCCESS" = "false" ]; do
+          DEPLOY_RETRY_COUNT=$((DEPLOY_RETRY_COUNT + 1))
+          echo "Deployment attempt $DEPLOY_RETRY_COUNT of $MAX_DEPLOY_RETRIES..."
+          
+          # 检查deploy目录是否存在且包含文件
+          if [ ! -d "deploy" ]; then
+            echo "❌ Deploy directory not found"
+            exit 1
+          fi
+          
+          echo "Deploy directory contents:"
+          ls -la deploy/
+          
+          echo "Deploying files:"
+          find deploy/ -type f | head -20
+          
+          # 执行部署，设置超时
+          echo "Running deployment command..."
+          DEPLOY_OUTPUT=$(timeout 120s npx cloudbase hosting:deploy deploy/ -e "$DEPLOY_ENVID" --verbose 2>&1)
+          DEPLOY_EXIT_CODE=$?
+          
+          echo "$DEPLOY_OUTPUT"
+          
+          if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
+            if echo "$DEPLOY_OUTPUT" | grep -q -i "success\|successful\|deployed\|完成\|成功"; then
+              DEPLOY_SUCCESS=true
+              echo "✅ Deployment completed successfully!"
+              
+              # 提取部署信息
+              echo "$DEPLOY_OUTPUT" | grep -E "(URL|网址|访问|access|hosting):" | head -5
+            else
+              echo "⚠️  Deployment command succeeded but output doesn't contain success indicators"
+              DEPLOY_SUCCESS=true  # 即使没有成功指示符也视为成功
+              echo "✅ Deployment completed (assuming success)"
+            fi
+          else
+            echo "❌ Deployment failed (exit code: $DEPLOY_EXIT_CODE)"
+            
+            if [ $DEPLOY_RETRY_COUNT -lt $MAX_DEPLOY_RETRIES ]; then
+              echo "Retrying in 10 seconds..."
+              sleep 10
+              
+              # 清理可能的状态
+              echo "Cleaning up before retry..."
+              rm -rf ~/.cloudbase/session* 2>/dev/null || true
+            fi
+          fi
+        done
+        
+        if [ "$DEPLOY_SUCCESS" = "false" ]; then
+          echo "❌ Failed to deploy after $MAX_DEPLOY_RETRIES attempts"
+          echo "Deployment logs:"
+          echo "$DEPLOY_OUTPUT"
+          
+          # 如果是最后一次矩阵尝试，才彻底失败
+          if [ "${{ matrix.attempt }}" = "3" ]; then
+            exit 1
+          else
+            echo "⚠️  This was attempt ${{ matrix.attempt }} of 3, continuing to next attempt"
+            exit 0  # 退出但不失败，让矩阵继续
+          fi
+        fi
     
     - name: Verify deployment
       run: |

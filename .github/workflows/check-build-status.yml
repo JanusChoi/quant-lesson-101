@@ -1,0 +1,202 @@
+name: Check and Retry Build Status
+
+on:
+  workflow_run:
+    workflows: ["Deploy to CloudBase"]
+    types:
+      - completed
+  # 手动触发检查
+  workflow_dispatch:
+    inputs:
+      workflow_id:
+        description: 'Workflow ID to check (optional)'
+        required: false
+        default: ''
+
+jobs:
+  check-and-retry:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+    
+    - name: Check workflow status
+      id: check-workflow
+      env:
+        GH_TOKEN: ${{ github.token }}
+        WORKFLOW_ID: ${{ github.event.workflow_run.id || inputs.workflow_id }}
+      run: |
+        echo "Checking workflow status..."
+        
+        # 如果没有提供workflow_id，获取最新的deploy工作流运行
+        if [ -z "$WORKFLOW_ID" ]; then
+          echo "Getting latest workflow run for Deploy to CloudBase..."
+          LATEST_RUN=$(gh run list --workflow "Deploy to CloudBase" --limit 1 --json databaseId,conclusion,status,url --jq '.[0]')
+          WORKFLOW_ID=$(echo $LATEST_RUN | jq -r '.databaseId')
+          WORKFLOW_CONCLUSION=$(echo $LATEST_RUN | jq -r '.conclusion')
+          WORKFLOW_STATUS=$(echo $LATEST_RUN | jq -r '.status')
+          WORKFLOW_URL=$(echo $LATEST_RUN | jq -r '.url')
+        else
+          echo "Checking workflow ID: $WORKFLOW_ID"
+          WORKFLOW_INFO=$(gh run view $WORKFLOW_ID --json conclusion,status,url)
+          WORKFLOW_CONCLUSION=$(echo $WORKFLOW_INFO | jq -r '.conclusion')
+          WORKFLOW_STATUS=$(echo $WORKFLOW_INFO | jq -r '.status')
+          WORKFLOW_URL=$(echo $WORKFLOW_INFO | jq -r '.url')
+        fi
+        
+        echo "Workflow ID: $WORKFLOW_ID"
+        echo "Workflow URL: $WORKFLOW_URL"
+        echo "Workflow Status: $WORKFLOW_STATUS"
+        echo "Workflow Conclusion: $WORKFLOW_CONCLUSION"
+        
+        # 输出到步骤输出
+        echo "workflow_id=$WORKFLOW_ID" >> $GITHUB_OUTPUT
+        echo "workflow_conclusion=$WORKFLOW_CONCLUSION" >> $GITHUB_OUTPUT
+        echo "workflow_status=$WORKFLOW_STATUS" >> $GITHUB_OUTPUT
+        echo "workflow_url=$WORKFLOW_URL" >> $GITHUB_OUTPUT
+        
+        # 检查是否需要重试
+        if [ "$WORKFLOW_CONCLUSION" = "success" ]; then
+          echo "✅ Last build was successful!"
+          echo "SUCCESS=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Last build failed with conclusion: $WORKFLOW_CONCLUSION"
+          echo "SUCCESS=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Retry failed build
+      if: steps.check-workflow.outputs.SUCCESS == 'false'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        WORKFLOW_ID: ${{ steps.check-workflow.outputs.workflow_id }}
+      run: |
+        echo "Attempting to retry failed workflow..."
+        
+        # 检查是否需要等待冷却期
+        LAST_RUN_AGE=$(gh run view $WORKFLOW_ID --json createdAt --jq '.createdAt')
+        LAST_RUN_TIMESTAMP=$(date -d "$LAST_RUN_AGE" +%s)
+        CURRENT_TIMESTAMP=$(date +%s)
+        TIME_DIFF=$((CURRENT_TIMESTAMP - LAST_RUN_TIMESTAMP))
+        
+        echo "Last run was at: $LAST_RUN_AGE"
+        echo "Time since last run: $TIME_DIFF seconds"
+        
+        # 如果最近运行过（5分钟内），等待一下
+        if [ $TIME_DIFF -lt 300 ]; then
+          WAIT_TIME=$((300 - TIME_DIFF))
+          echo "Last run was recent, waiting $WAIT_TIME seconds before retry..."
+          sleep $WAIT_TIME
+        fi
+        
+        echo "Triggering retry of workflow $WORKFLOW_ID..."
+        gh run rerun $WORKFLOW_ID || echo "Failed to trigger rerun, may need manual action"
+        
+        echo "✅ Retry triggered"
+        echo "Monitoring retry will begin in 60 seconds..."
+    
+    - name: Monitor retry status
+      if: steps.check-workflow.outputs.SUCCESS == 'false'
+      run: |
+        echo "Starting to monitor retry status..."
+        
+        MAX_WAIT=600  # 最多等待10分钟
+        WAIT_INTERVAL=30  # 每30秒检查一次
+        ELAPSED=0
+        
+        while [ $ELAPSED -lt $MAX_WAIT ]; do
+          sleep $WAIT_INTERVAL
+          ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+          
+          echo "Checking retry status after $ELAPSED seconds..."
+          
+          # 获取最新的工作流运行状态
+          LATEST_RUN=$(gh run list --workflow "Deploy to CloudBase" --limit 1 --json status,conclusion,url)
+          RUN_STATUS=$(echo $LATEST_RUN | jq -r '.[0].status')
+          RUN_CONCLUSION=$(echo $LATEST_RUN | jq -r '.[0].conclusion')
+          RUN_URL=$(echo $LATEST_RUN | jq -r '.[0].url')
+          
+          echo "Current status: $RUN_STATUS, conclusion: $RUN_CONCLUSION"
+          
+          if [ "$RUN_STATUS" = "completed" ]; then
+            if [ "$RUN_CONCLUSION" = "success" ]; then
+              echo "🎉 Build retry succeeded!"
+              echo "Build URL: $RUN_URL"
+              exit 0
+            else
+              echo "❌ Build retry failed with conclusion: $RUN_CONCLUSION"
+              echo "Build URL: $RUN_URL"
+              exit 1
+            fi
+          fi
+          
+          # 显示进度
+          echo "Still waiting for retry to complete..."
+        done
+        
+        echo "⚠️  Monitoring timeout reached after $MAX_WAIT seconds"
+        echo "Please check the retry status manually"
+        
+    - name: Send notification on success
+      if: steps.check-workflow.outputs.SUCCESS == 'true'
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        WORKFLOW_URL: ${{ steps.check-workflow.outputs.workflow_url }}
+      run: |
+        echo "Sending success notification..."
+        
+        # 检查是否有Discord webhook配置
+        if [ -n "$DISCORD_WEBHOOK" ]; then
+          echo "Sending Discord notification..."
+          
+          # 构建Discord webhook消息
+          MESSAGE=$(cat <<EOF
+          {
+            "content": "🎉 GitHub Actions Build Successful!",
+            "embeds": [{
+              "title": "Deployment Complete",
+              "description": "The automatic deployment to CloudBase has completed successfully.",
+              "color": 3066993,
+              "fields": [
+                {
+                  "name": "Workflow",
+                  "value": "Deploy to CloudBase"
+                },
+                {
+                  "name": "Status",
+                  "value": "✅ SUCCESS"
+                },
+                {
+                  "name": "View Details",
+                  "value": "[Open Workflow]($WORKFLOW_URL)"
+                }
+              ],
+              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }]
+          }
+          EOF
+          )
+          
+          curl -X POST -H "Content-Type: application/json" -d "$MESSAGE" "$DISCORD_WEBHOOK"
+        fi
+        
+        echo "✅ Success notification sent (if configured)"
+        
+        # 输出完成消息
+        echo "=================================================="
+        echo "🎉 BUILD SUCCESSFULLY COMPLETED!"
+        echo "=================================================="
+        echo "Workflow URL: $WORKFLOW_URL"
+        echo "Timestamp: $(date)"
+        echo "=================================================="
+        echo "The automatic build has completed successfully."
+        echo "You can now access your deployed application."
+        echo "=================================================="
