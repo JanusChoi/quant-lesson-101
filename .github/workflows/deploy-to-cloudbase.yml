@@ -29,7 +29,7 @@ jobs:
         cache: 'npm'
     
     - name: Install CloudBase CLI
-      run: npm install -g @cloudbase/cli
+      run: npm install @cloudbase/cli
     
     - name: Verify CloudBase configuration
       run: |
@@ -109,46 +109,48 @@ EOF
         echo "Deploy directory contents:"
         ls -la deploy/
     
-    - name: Deploy to CloudBase using environment variables
+    - name: Login to CloudBase with API Key
       env:
         CLOUDBASE_ENVID: ${{ secrets.CLOUDBASE_ENVID }}
         CLOUDBASE_SECRETID: ${{ secrets.CLOUDBASE_SECRETID }}
         CLOUDBASE_SECRETKEY: ${{ secrets.CLOUDBASE_SECRETKEY }}
       run: |
-        echo "Deploying to CloudBase environment: $CLOUDBASE_ENVID"
+        echo "Logging in to CloudBase with API Key..."
         
         # 检查必要的secret是否已配置
-        if [ -z "$CLOUDBASE_ENVID" ] || [ -z "$CLOUDBASE_SECRETKEY" ]; then
+        if [ -z "$CLOUDBASE_ENVID" ] || [ -z "$CLOUDBASE_SECRETID" ] || [ -z "$CLOUDBASE_SECRETKEY" ]; then
           echo "❌ CloudBase secrets not configured!"
           echo "Please configure the following secrets in GitHub:"
           echo "  - CLOUDBASE_ENVID"
+          echo "  - CLOUDBASE_SECRETID"
           echo "  - CLOUDBASE_SECRETKEY"
-          echo "Optional: CLOUDBASE_SECRETID (API Key name)"
           exit 1
         fi
         
-        # 设置CloudBase环境变量
-        export TCB_ENVID="$CLOUDBASE_ENVID"
-        export TCB_SECRETID="$CLOUDBASE_SECRETID"
-        export TCB_SECRETKEY="$CLOUDBASE_SECRETKEY"
+        echo "Environment variables:"
+        echo "CLOUDBASE_ENVID: $CLOUDBASE_ENVID"
+        echo "CLOUDBASE_SECRETID: $CLOUDBASE_SECRETID"
+        echo "CLOUDBASE_SECRETKEY: [HIDDEN]"
         
-        echo "Environment variables set:"
-        echo "TCB_ENVID: $TCB_ENVID"
-        echo "TCB_SECRETID: $TCB_SECRETID"
-        echo "TCB_SECRETKEY: [HIDDEN]"
+        # 使用腾讯云API密钥登录
+        npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY"
         
-        # 尝试直接部署，依赖环境变量认证
-        echo "Attempting deployment with CloudBase CLI..."
-        cloudbase hosting:deploy deploy/ -e "$CLOUDBASE_ENVID" --verbose
+        # 验证登录成功
+        if npx cloudbase env:list | grep -q "$CLOUDBASE_ENVID"; then
+          echo "✅ Successfully logged in to CloudBase"
+        else
+          echo "❌ Failed to login to CloudBase or environment not found"
+          echo "Available environments:"
+          npx cloudbase env:list || true
+          exit 1
+        fi
     
     - name: Deploy to CloudBase
-      env:
-        CLOUDBASE_ENVID: ${{ secrets.CLOUDBASE_ENVID }}
       run: |
-        echo "Deploying to CloudBase environment: $CLOUDBASE_ENVID"
+        echo "Deploying to CloudBase environment: ${{ secrets.CLOUDBASE_ENVID }}"
         
         # 部署到CloudBase
-        cloudbase hosting:deploy deploy/ -e "$CLOUDBASE_ENVID"
+        npx cloudbase hosting:deploy deploy/ -e "${{ secrets.CLOUDBASE_ENVID }}" --verbose
         
         echo "✅ Deployment completed!"
     
