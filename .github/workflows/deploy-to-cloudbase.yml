@@ -33,7 +33,17 @@ jobs:
         FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
     
     - name: Install dependencies
-      run: npm ci
+      run: |
+        echo "Installing dependencies..."
+        npm ci
+        
+        # 显式安装CloudBase CLI
+        echo "Installing CloudBase CLI globally..."
+        npm install -g @cloudbase/cli@2.12.7
+        
+        # 验证安装
+        echo "Verifying CloudBase CLI installation..."
+        cloudbase --version || (echo "CloudBase CLI installation failed" && exit 1)
     
     - name: Verify CloudBase configuration
       run: |
@@ -112,6 +122,7 @@ jobs:
         ls -la deploy/
     
     - name: Login to CloudBase with API Key
+      id: cloudbase-login
       env:
         CLOUDBASE_ENVID: ${{ secrets.CLOUDBASE_ENVID }}
         CLOUDBASE_SECRETID: ${{ secrets.CLOUDBASE_SECRETID }}
@@ -121,15 +132,26 @@ jobs:
         echo "==================================================="
         
         # 检查必要的secret是否已配置
-        if [ -z "$CLOUDBASE_ENVID" ] || [ -z "$CLOUDBASE_SECRETID" ] || [ -z "$CLOUDBASE_SECRETKEY" ]; then
-          echo "❌ CloudBase secrets not configured!"
-          echo "Please configure the following secrets in GitHub:"
-          echo "  - CLOUDBASE_ENVID"
-          echo "  - CLOUDBASE_SECRETID"
-          echo "  - CLOUDBASE_SECRETKEY"
+        echo "Checking GitHub Secrets configuration..."
+        if [ -z "$CLOUDBASE_ENVID" ]; then
+          echo "❌ CLOUDBASE_ENVID is not set or empty!"
+          echo "Error: GitHub Secret CLOUDBASE_ENVID is missing or empty."
           exit 1
         fi
         
+        if [ -z "$CLOUDBASE_SECRETID" ]; then
+          echo "❌ CLOUDBASE_SECRETID is not set or empty!"
+          echo "Error: GitHub Secret CLOUDBASE_SECRETID is missing or empty."
+          exit 1
+        fi
+        
+        if [ -z "$CLOUDBASE_SECRETKEY" ]; then
+          echo "❌ CLOUDBASE_SECRETKEY is not set or empty!"
+          echo "Error: GitHub Secret CLOUDBASE_SECRETKEY is missing or empty."
+          exit 1
+        fi
+        
+        echo "✅ All required GitHub Secrets are present"
         echo "Environment variables:"
         echo "CLOUDBASE_ENVID: $CLOUDBASE_ENVID"
         echo "CLOUDBASE_SECRETID: $CLOUDBASE_SECRETID"
@@ -139,29 +161,54 @@ jobs:
         echo "Cleaning up any previous CloudBase session..."
         rm -rf ~/.cloudbase 2>/dev/null || true
         
-        # 使用腾讯云API密钥登录 - 简化版本
+        # 验证CloudBase CLI已安装
+        echo "Verifying CloudBase CLI installation..."
+        if ! cloudbase --version > /dev/null 2>&1; then
+          echo "❌ CloudBase CLI is not installed!"
+          echo "Installing CloudBase CLI..."
+          npm install -g @cloudbase/cli@2.12.7
+          cloudbase --version || (echo "Failed to install CloudBase CLI" && exit 1)
+        fi
+        
+        # 使用腾讯云API密钥登录 - 带详细错误输出
         echo "Attempting CloudBase login..."
+        echo "Command: cloudbase login --apiKeyId \"$CLOUDBASE_SECRETID\" --apiKey \"$CLOUDBASE_SECRETKEY\""
         
-        # 先检查cloudbase命令是否可用
-        npx cloudbase --version || echo "CloudBase CLI not installed, will install automatically"
+        # 尝试登录，捕获详细输出
+        LOGIN_OUTPUT=$(cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY" 2>&1)
+        LOGIN_EXIT_CODE=$?
         
-        # 尝试登录
-        npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY"
+        echo "Login output:"
+        echo "$LOGIN_OUTPUT"
         
-        # 检查登录是否成功
-        if [ $? -eq 0 ]; then
+        if [ $LOGIN_EXIT_CODE -eq 0 ]; then
           echo "✅ CloudBase login successful"
           
           # 显示环境信息
           echo "Available environments:"
-          npx cloudbase env:list || echo "Cannot list environments, but login succeeded"
+          cloudbase env:list 2>&1 || echo "Note: Cannot list environments, but login succeeded"
         else
-          echo "❌ CloudBase login failed"
-          echo "Possible issues:"
-          echo "1. API密钥无效或过期"
-          echo "2. 环境ID不正确"
-          echo "3. 网络连接问题"
-          echo "4. CloudBase服务暂时不可用"
+          echo "❌ CloudBase login failed with exit code: $LOGIN_EXIT_CODE"
+          echo ""
+          echo "===== 根本原因诊断 ====="
+          echo "1. GitHub Secrets可能未正确配置:"
+          echo "   - 访问 https://github.com/JanusChoi/quant-lesson-101/settings/secrets/actions"
+          echo "   - 检查 CLOUDBASE_ENVID, CLOUDBASE_SECRETID, CLOUDBASE_SECRETKEY 是否存在"
+          echo ""
+          echo "2. API密钥可能已过期:"
+          echo "   - 访问腾讯云控制台: https://console.cloud.tencent.com/cam/capi"
+          echo "   - 重新生成API密钥"
+          echo "   - 更新GitHub Secrets"
+          echo ""
+          echo "3. CloudBase环境可能不存在:"
+          echo "   - 检查环境ID: $CLOUDBASE_ENVID"
+          echo "   - 访问腾讯云CloudBase控制台确认环境"
+          echo ""
+          echo "4. 权限问题:"
+          echo "   - API密钥可能没有访问该环境的权限"
+          echo ""
+          echo "5. 网络或服务问题:"
+          echo "   - CloudBase服务可能暂时不可用"
           exit 1
         fi
     
