@@ -85,24 +85,22 @@ jobs:
         fi
         
         # 创建或更新index.html重定向文件
-        cat > deploy/index.html << 'EOF'
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anki学习系统 - 重定向</title>
-    <meta http-equiv="refresh" content="0; url=anki学习系统.html">
-    <script>
-        // JavaScript重定向作为备用
-        window.location.href = "anki学习系统.html";
-    </script>
-</head>
-<body>
-    <p>正在重定向到Anki学习系统... 如果未自动跳转，请<a href="anki学习系统.html">点击这里</a>。</p>
-</body>
-</html>
-EOF
+        echo '<!DOCTYPE html>' > deploy/index.html
+        echo '<html lang="zh-CN">' >> deploy/index.html
+        echo '<head>' >> deploy/index.html
+        echo '    <meta charset="UTF-8">' >> deploy/index.html
+        echo '    <meta name="viewport" content="width=device-width, initial-scale=1.0">' >> deploy/index.html
+        echo '    <title>Anki学习系统 - 重定向</title>' >> deploy/index.html
+        echo '    <meta http-equiv="refresh" content="0; url=anki学习系统.html">' >> deploy/index.html
+        echo '    <script>' >> deploy/index.html
+        echo '        // JavaScript重定向作为备用' >> deploy/index.html
+        echo '        window.location.href = "anki学习系统.html";' >> deploy/index.html
+        echo '    </script>' >> deploy/index.html
+        echo '</head>' >> deploy/index.html
+        echo '<body>' >> deploy/index.html
+        echo '    <p>正在重定向到Anki学习系统... 如果未自动跳转，请<a href="anki学习系统.html">点击这里</a>。</p>' >> deploy/index.html
+        echo '</body>' >> deploy/index.html
+        echo '</html>' >> deploy/index.html
         echo "✅ Created/updated index.html redirect file"
         
         # 显示deploy目录内容
