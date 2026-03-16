@@ -40,6 +40,5 @@ Desktop.ini
 .~lock.*
 
 # 包管理器文件
-package-lock.json
 yarn.lock
 pnpm-lock.yaml

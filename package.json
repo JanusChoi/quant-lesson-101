@@ -1,0 +1,26 @@
+{
+  "name": "anki-learning-system",
+  "version": "1.0.0",
+  "description": "Anki学习系统 - 量化投资读书会",
+  "main": "anki学习系统.html",
+  "scripts": {
+    "test": "echo \"No tests specified\"",
+    "build": "echo \"No build step required for static site\"",
+    "deploy": "cloudbase hosting:deploy deploy/ -e mybuddy-7g3xqv3hf98903ec --verbose"
+  },
+  "keywords": [
+    "anki",
+    "learning",
+    "quantitative",
+    "investment",
+    "flashcards"
+  ],
+  "author": "Janus Choi",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudbase/cli": "^2.12.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
