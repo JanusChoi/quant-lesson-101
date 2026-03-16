@@ -137,54 +137,32 @@ jobs:
         
         # 清理可能的缓存或临时登录状态
         echo "Cleaning up any previous CloudBase session..."
-        rm -rf ~/.cloudbase || true
+        rm -rf ~/.cloudbase 2>/dev/null || true
         
-        # 使用腾讯云API密钥登录，添加重试逻辑
-        MAX_RETRIES=3
-        RETRY_COUNT=0
-        LOGIN_SUCCESS=false
+        # 使用腾讯云API密钥登录 - 简化版本
+        echo "Attempting CloudBase login..."
         
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$LOGIN_SUCCESS" = "false" ]; do
-          RETRY_COUNT=$((RETRY_COUNT + 1))
-          echo "Attempting CloudBase login (try $RETRY_COUNT of $MAX_RETRIES)..."
+        # 先检查cloudbase命令是否可用
+        npx cloudbase --version || echo "CloudBase CLI not installed, will install automatically"
+        
+        # 尝试登录
+        npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY"
+        
+        # 检查登录是否成功
+        if [ $? -eq 0 ]; then
+          echo "✅ CloudBase login successful"
           
-          # 设置超时和重试延迟
-          timeout 30s npx cloudbase login --apiKeyId "$CLOUDBASE_SECRETID" --apiKey "$CLOUDBASE_SECRETKEY" 2>&1 | tee login.log
-          LOGIN_EXIT_CODE=${PIPESTATUS[0]}
-          
-          if [ $LOGIN_EXIT_CODE -eq 0 ]; then
-            LOGIN_SUCCESS=true
-            echo "✅ CloudBase login successful"
-          else
-            echo "⚠️  CloudBase login failed (exit code: $LOGIN_EXIT_CODE)"
-            
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retrying in 5 seconds..."
-              sleep 5
-            fi
-          fi
-        done
-        
-        if [ "$LOGIN_SUCCESS" = "false" ]; then
-          echo "❌ Failed to login to CloudBase after $MAX_RETRIES attempts"
-          echo "Login log:"
-          cat login.log 2>/dev/null || true
-          exit 1
-        fi
-        
-        # 验证登录成功
-        echo "Verifying login and environment access..."
-        if timeout 15s npx cloudbase env:list 2>/dev/null | grep -q "$CLOUDBASE_ENVID"; then
-          echo "✅ Successfully logged in to CloudBase and found environment: $CLOUDBASE_ENVID"
+          # 显示环境信息
           echo "Available environments:"
-          timeout 10s npx cloudbase env:list 2>/dev/null || echo "Cannot list environments"
+          npx cloudbase env:list || echo "Cannot list environments, but login succeeded"
         else
-          echo "❌ Failed to verify CloudBase login or environment not found"
-          echo "Trying to list all environments:"
-          timeout 10s npx cloudbase env:list 2>/dev/null || echo "Cannot list environments"
-          
-          # 即使环境列表失败，也可能可以部署（尝试继续）
-          echo "⚠️  Continuing with deployment attempt..."
+          echo "❌ CloudBase login failed"
+          echo "Possible issues:"
+          echo "1. API密钥无效或过期"
+          echo "2. 环境ID不正确"
+          echo "3. 网络连接问题"
+          echo "4. CloudBase服务暂时不可用"
+          exit 1
         fi
     
     - name: Deploy to CloudBase with retry
