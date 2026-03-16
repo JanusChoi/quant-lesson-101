@@ -402,6 +402,8 @@
         <main class="main-content">
             <div class="top-bar">
                 <div class="card-info">
+                    <span>当前书: <span id="currentBook">未选择</span></span>
+                    <span>当前章节: <span id="currentChapterName">未选择</span></span>
                     <span>当前卡片: <span class="current" id="currentNum">0</span> / <span id="totalNum">0</span></span>
                     <span class="card-type" id="cardType">概念卡</span>
                 </div>
@@ -500,6 +502,8 @@
                 for (const [chapter, indices] of Object.entries(chapters)) {
                     const chapterItem = document.createElement('div');
                     chapterItem.className = 'chapter-item';
+                    chapterItem.setAttribute('data-book', book);
+                    chapterItem.setAttribute('data-chapter', chapter);
                     chapterItem.innerHTML = `${chapter} <span class="count">${indices.length}</span>`;
                     chapterItem.onclick = () => selectChapter(book, chapter);
                     chapterList.appendChild(chapterItem);
@@ -517,9 +521,15 @@
             currentIndex = 0;
             isFlipped = false;
             
-            // 更新导航高亮
+            // 更新当前书和章节显示
+            document.getElementById('currentBook').textContent = book;
+            document.getElementById('currentChapterName').textContent = chapter;
+            
+            // 更新导航高亮 - 精确匹配书和章节
             document.querySelectorAll('.chapter-item').forEach(item => {
-                if (item.textContent.includes(chapter)) {
+                const itemBook = item.getAttribute('data-book');
+                const itemChapter = item.getAttribute('data-chapter');
+                if (itemBook === book && itemChapter === chapter) {
                     item.classList.add('active');
                 } else {
                     item.classList.remove('active');
