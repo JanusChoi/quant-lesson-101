@@ -1,0 +1,45 @@
+# CloudBase 忽略规则同步（基于cloudbaserc.json配置）
+主动投资组合管理/**
+打开量化投资的黑箱/**
+模板_*
+*.py
+*.md
+*.txt
+*.pptx
+
+# 部署目录（deploy/目录的内容会从其他地方复制，不需要跟踪原始文件）
+deploy/
+
+# Git 标准忽略
+node_modules/
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# 环境配置文件（敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 操作系统生成文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.~lock.*
+
+# 包管理器文件
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化投资读书会 - Anki学习系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #1E2761;
+            --accent: #EAB308;
+            --danger: #DC2626;
+            --success: #16A34A;
+            --bg: #0F172A;
+            --card-bg: #1E293B;
+            --text: #F8FAFC;
+            --text-muted: #94A3B8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 左侧导航 */
+        .sidebar {
+            width: 280px;
+            background: var(--card-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 18px;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .sidebar-header p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .nav-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .book-group {
+            margin-bottom: 10px;
+        }
+
+        .book-title {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .book-title:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .book-title::before {
+            content: '📚';
+        }
+
+        .chapter-list {
+            display: none;
+        }
+
+        .chapter-list.active {
+            display: block;
+        }
+
+        .chapter-item {
+            padding: 8px 20px 8px 40px;
+            font-size: 13px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chapter-item:hover {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--accent);
+        }
+
+        .chapter-item.active {
+            background: rgba(234, 179, 8, 0.15);
+            color: var(--accent);
+            border-left: 3px solid var(--accent);
+        }
+
+        .chapter-item .count {
+            float: right;
+            font-size: 11px;
+            background: var(--primary);
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, var(--bg) 0%, #1a1a2e 100%);
+        }
+
+        .top-bar {
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-info {
+            display: flex;
+            gap: 20px;
+        }
+
+        .card-info span {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .card-info .current {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .card-type {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .card-type.concept { background: rgba(59, 130, 246, 0.2); color: #60A5FA; }
+        .card-type.counter { background: rgba(239, 68, 68, 0.2); color: #F87171; }
+        .card-type.quote { background: rgba(234, 179, 8, 0.2); color: #FACC15; }
+        .card-type.people { background: rgba(34, 197, 94, 0.2); color: #4ADE80; }
+
+        .progress-bar {
+            width: 200px;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #FCD34D);
+            transition: width 0.3s ease;
+        }
+
+        /* 卡片区域 */
+        .card-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            perspective: 1000px;
+        }
+
+        .flashcard {
+            width: 100%;
+            max-width: 700px;
+            min-height: 400px;
+            position: relative;
+            cursor: pointer;
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .flashcard.flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            min-height: 400px;
+            backface-visibility: hidden;
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .card-front {
+            background: linear-gradient(145deg, var(--card-bg) 0%, #252d4a 100%);
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+            background: linear-gradient(145deg, #252d4a 0%, var(--card-bg) 100%);
+        }
+
+        .flip-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-front .card-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .card-front .card-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: auto;
+        }
+
+        .card-back .card-content {
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text);
+        }
+
+        .card-back .card-content strong {
+            color: var(--accent);
+        }
+
+        .card-back .card-content p {
+            margin-bottom: 15px;
+        }
+
+        .source-info {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* 底部控制栏 */
+        .controls {
+            padding: 20px 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .flip-btn {
+            padding: 12px 30px;
+            border-radius: 25px;
+            border: 2px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .flip-btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-muted);
+        }
+
+        .empty-state h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        /* 快捷键提示 */
+        .shortcuts {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 11px;
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .shortcuts kbd {
+            background: var(--border);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin: 0 2px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -280px;
+                z-index: 100;
+                transition: left 0.3s;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .card-container {
+                padding: 15px;
+            }
+            
+            .flashcard, .card-face {
+                min-height: 350px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 左侧导航 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>📖 量化投资读书会</h1>
+                <p>Anki式学习系统</p>
+            </div>
+            <nav class="nav-scroll" id="navTree">
+                <!-- 动态生成导航树 -->
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="top-bar">
+                <div class="card-info">
+                    <span>当前卡片: <span class="current" id="currentNum">0</span> / <span id="totalNum">0</span></span>
+                    <span class="card-type" id="cardType">概念卡</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card-container">
+                <div class="flashcard" id="flashcard">
+                    <div class="card-face card-front">
+                        <div class="card-title" id="cardFront"></div>
+                        <div class="card-subtitle" id="cardFrontHint">点击翻转查看答案</div>
+                    </div>
+                    <div class="card-face card-back">
+                        <div class="card-content" id="cardBack"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button class="nav-btn" id="prevBtn" title="上一个 (←)">←</button>
+                <button class="flip-btn" id="flipBtn">翻转卡片 (Space)</button>
+                <button class="nav-btn" id="nextBtn" title="下一个 (→)">→</button>
+            </div>
+        </main>
+    </div>
+
+    <div class="shortcuts">
+        <kbd>←</kbd> <kbd>→</kbd> 翻页 &nbsp; <kbd>Space</kbd> 翻转
+    </div>
+
+    <script>
+        // 全局数据
+        let cardsData = { cards: [], navigation: {} };
+        let currentIndex = 0;
+        let currentChapter = null;
+        let isFlipped = false;
+
+        // 加载数据
+        async function loadData() {
+            try {
+                const response = await fetch('cards_data.json');
+                cardsData = await response.json();
+                initApp();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                // 尝试从父目录加载
+                try {
+                    const response = await fetch('../cards_data.json');
+                    cardsData = await response.json();
+                    initApp();
+                } catch (e) {
+                    document.querySelector('.card-container').innerHTML = `
+                        <div class="empty-state">
+                            <h2>📂 数据加载失败</h2>
+                            <p>请确保 cards_data.json 文件存在</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 初始化应用
+        function initApp() {
+            renderNavigation();
+            
+            // 默认显示第一章
+            const firstBook = Object.keys(cardsData.navigation)[0];
+            const firstChapter = Object.keys(cardsData.navigation[firstBook])[0];
+            selectChapter(firstBook, firstChapter);
+            
+            updateUI();
+        }
+
+        // 渲染导航
+        function renderNavigation() {
+            const navTree = document.getElementById('navTree');
+            navTree.innerHTML = '';
+            
+            for (const [book, chapters] of Object.entries(cardsData.navigation)) {
+                const bookGroup = document.createElement('div');
+                bookGroup.className = 'book-group';
+                
+                const bookTitle = document.createElement('div');
+                bookTitle.className = 'book-title';
+                bookTitle.textContent = book;
+                bookTitle.onclick = () => {
+                    const list = bookGroup.querySelector('.chapter-list');
+                    list.classList.toggle('active');
+                };
+                
+                const chapterList = document.createElement('div');
+                chapterList.className = 'chapter-list active';
+                
+                for (const [chapter, indices] of Object.entries(chapters)) {
+                    const chapterItem = document.createElement('div');
+                    chapterItem.className = 'chapter-item';
+                    chapterItem.innerHTML = `${chapter} <span class="count">${indices.length}</span>`;
+                    chapterItem.onclick = () => selectChapter(book, chapter);
+                    chapterList.appendChild(chapterItem);
+                }
+                
+                bookGroup.appendChild(bookTitle);
+                bookGroup.appendChild(chapterList);
+                navTree.appendChild(bookGroup);
+            }
+        }
+
+        // 选择章节
+        function selectChapter(book, chapter) {
+            currentChapter = { book, chapter };
+            currentIndex = 0;
+            isFlipped = false;
+            
+            // 更新导航高亮
+            document.querySelectorAll('.chapter-item').forEach(item => {
+                if (item.textContent.includes(chapter)) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+            
+            updateUI();
+        }
+
+        // 获取当前章节的卡片
+        function getCurrentCards() {
+            if (!currentChapter) return [];
+            return cardsData.navigation[currentChapter.book]?.[currentChapter.chapter] || [];
+        }
+
+        // 更新界面
+        function updateUI() {
+            const indices = getCurrentCards();
+            const cardData = cardsData.cards[indices[currentIndex]];
+            
+            if (!cardData) {
+                document.querySelector('.card-container').innerHTML = `
+                    <div class="empty-state">
+                        <h2>📭 该章节暂无卡片</h2>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 更新进度
+            document.getElementById('currentNum').textContent = currentIndex + 1;
+            document.getElementById('totalNum').textContent = indices.length;
+            document.getElementById('progress').style.width = ((currentIndex + 1) / indices.length * 100) + '%';
+            
+            // 更新卡片类型
+            const typeEl = document.getElementById('cardType');
+            typeEl.textContent = cardData.type;
+            typeEl.className = 'card-type ' + {
+                '概念卡': 'concept',
+                '反常识卡': 'counter',
+                '金句卡': 'quote',
+                '人名卡': 'people'
+            }[cardData.type] || 'concept';
+            
+            // 更新卡片内容
+            const flashcard = document.getElementById('flashcard');
+            flashcard.classList.remove('flipped');
+            isFlipped = false;
+            
+            document.getElementById('cardFront').textContent = cardData.front;
+            document.getElementById('cardBack').innerHTML = formatContent(cardData.back);
+            document.getElementById('cardBack').innerHTML += `
+                <div class="source-info">
+                    📖 ${cardData.book} · ${cardData.filename}
+                </div>
+            `;
+            
+            // 更新按钮状态
+            document.getElementById('prevBtn').disabled = currentIndex === 0;
+            document.getElementById('nextBtn').disabled = currentIndex >= indices.length - 1;
+        }
+
+        // 格式化内容
+        function formatContent(text) {
+            if (!text) return '';
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/^/, '<p>')
+                .replace(/$/, '</p>');
+        }
+
+        // 翻转卡片
+        function flipCard() {
+            const flashcard = document.getElementById('flashcard');
+            flashcard.classList.toggle('flipped');
+            isFlipped = !isFlipped;
+        }
+
+        // 翻页
+        function prevCard() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateUI();
+            }
+        }
+
+        function nextCard() {
+            const indices = getCurrentCards();
+            if (currentIndex < indices.length - 1) {
+                currentIndex++;
+                updateUI();
+            }
+        }
+
+        // 事件监听
+        document.getElementById('flashcard').addEventListener('click', flipCard);
+        document.getElementById('flipBtn').addEventListener('click', flipCard);
+        document.getElementById('prevBtn').addEventListener('click', prevCard);
+        document.getElementById('nextBtn').addEventListener('click', nextCard);
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Space') {
+                e.preventDefault();
+                flipCard();
+            } else if (e.key === 'ArrowLeft') {
+                prevCard();
+            } else if (e.key === 'ArrowRight') {
+                nextCard();
+            }
+        });
+
+        // 启动
+        loadData();
+    </script>
+</body>
+</html>
