@@ -62,31 +62,35 @@ jobs:
         fi
         echo "✅ Environment ID: $ENV_ID"
     
+    - name: Build cards data from Markdown
+      run: |
+        echo "Building cards data from Markdown files..."
+        node build-cards.js
+        echo "✅ Cards data generated"
+
     - name: Prepare deployment directory
       run: |
         echo "Preparing deployment directory..."
-        
+
         # 如果deploy目录不存在，创建它
         if [ ! -d "deploy" ]; then
           mkdir deploy
         fi
-        
+
         # 复制必要文件到deploy目录
         echo "Copying essential files to deploy directory..."
-        
+
         # 复制主HTML文件
-        if [ -f "anki学习系统.html" ]; then
-          cp "anki学习系统.html" deploy/
-          echo "✅ Copied anki学习系统.html"
+        if [ -f "deploy/anki学习系统.html" ]; then
+          echo "✅ anki学习系统.html already in deploy/"
         else
           echo "❌ anki学习系统.html not found!"
           exit 1
         fi
-        
-        # 复制数据文件
-        if [ -f "cards_data.json" ]; then
-          cp cards_data.json deploy/
-          echo "✅ Copied cards_data.json"
+
+        # 数据文件已由build-cards.js生成到deploy目录
+        if [ -f "deploy/cards_data.json" ]; then
+          echo "✅ cards_data.json generated"
         else
           echo "❌ cards_data.json not found!"
           exit 1

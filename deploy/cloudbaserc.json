@@ -1,0 +1,24 @@
+{
+  "envId": "mybuddy-7g3xqv3hf98903ec",
+  "functionRoot": "./",
+  "functions": [],
+  "hosting": {
+    "public": "./",
+    "ignore": [
+      ".git/**",
+      ".github/**",
+      "node_modules/**",
+      "*.py",
+      "*.md",
+      "模板_*",
+      "主动投资组合管理/**",
+      "打开量化投资的黑箱/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/anki学习系统.html"
+      }
+    ]
+  }
+}

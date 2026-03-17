@@ -10,8 +10,9 @@
 # 排除演示文稿
 *.pptx
 
-# 排除部署目录（deploy/目录的内容会从其他地方复制，不需要跟踪原始文件）
-deploy/
+# 排除部署目录中的生成文件
+deploy/cards_data.json
+deploy/index.html
 
 # Git 标准忽略
 node_modules/
@@ -33,50 +34,6 @@ node_modules/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-
-# IDE 配置文件
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.~lock.*
-
-# 包管理器文件
-yarn.lock
-pnpm-lock.yaml
-
-# 部署目录（deploy/目录的内容会从其他地方复制，不需要跟踪原始文件）
-deploy/
-
-# Git 标准忽略
-node_modules/
-.vscode/
-.idea/
-.DS_Store
-*.log
-*.tmp
-*.temp
-*.swp
-*.swo
-
-# 环境配置文件（敏感信息）
-.env
-.env.local
-.env.*.local
-
-# 操作系统生成文件
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# IDE 配置文件
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.~lock.*
 
 # 包管理器文件
 yarn.lock
