@@ -90,9 +90,16 @@ cards.forEach((card, index) => {
 });
 
 const output = { cards, navigation };
+const outputJson = JSON.stringify(output, null, 2);
+
 fs.writeFileSync(
   path.join(__dirname, 'deploy', 'cards_data.json'),
-  JSON.stringify(output, null, 2)
+  outputJson
+);
+
+fs.writeFileSync(
+  path.join(__dirname, 'cards_data.json'),
+  outputJson
 );
 
 console.log(`✅ 生成 ${cards.length} 张卡片`);
